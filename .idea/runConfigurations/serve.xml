@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="serve" type="PhpLocalRunConfigurationType" factoryName="PHP Console" path="-S" scriptParameters="0.0.0.0:8085">
+    <CommandLine>
+      <PhpTestInterpreterSettings>
+        <option name="interpreterName" value="php_rabbitmq2" />
+      </PhpTestInterpreterSettings>
+    </CommandLine>
+    <method v="2" />
+  </configuration>
+</component>
