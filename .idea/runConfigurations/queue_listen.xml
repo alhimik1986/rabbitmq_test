@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="queue/listen" type="PhpLocalRunConfigurationType" factoryName="PHP Console" path="/app/yii" scriptParameters="queue/listen --isolate=0">
+    <method v="2" />
+  </configuration>
+</component>
