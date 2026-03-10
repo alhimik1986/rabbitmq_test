@@ -1,0 +1,173 @@
+﻿x-otel-common:
+    &otel-common
+    OTEL_LOG_LEVEL: warning # The library does not respect this environment variable as of this writing
+    OTEL_TRACES_SAMPLER: parentbased_always_on
+    OTEL_TRACES_EXPORTER: otlp
+    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: grpc
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
+    OTEL_PHP_TRACES_PROCESSOR: simple
+
+services:
+    rabbitmq:
+        hostname: rabbitmq
+        image: rabbitmq:4-management
+        ports:
+            - '5673:5672'
+            - '15673:15672'
+        # environment:
+            # - RABBITMQ_DEFAULT_USER=guest
+            # - RABBITMQ_DEFAULT_PASSWORD=guest
+        networks:
+            - backend
+
+    php_rabbitmq:
+        hostname: php_rabbitmq
+        container_name: php_rabbitmq
+        ports:
+            - "8080:8080"
+        expose:
+            - "8080"
+        build:
+            context: ./docker/php
+        volumes:
+            - ./app:/app
+            - ./:/app_all
+            - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+        env_file: ".env"
+        working_dir: /app
+        links:
+            - rabbitmq
+#        # Чтобы контейнер php мог видеть контейнер nginx
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+#            - "php_rabbitmq:host-gateway"
+#            - "${EOSAGO_INTERNAL_HOST}:host-gateway"
+#            - "${EOSAGO_TEST_HOST}:host-gateway"
+#            - "${EOSAGO_INTERNAL_TEST_HOST}:host-gateway"
+        networks:
+            - backend
+
+    php_rabbitmq2:
+        hostname: php_rabbitmq2
+        container_name: php_rabbitmq2
+        ports:
+            - "8085:8085"
+        expose:
+            - "8085"
+        build:
+            context: ./docker/php
+        volumes:
+            - ./app:/app
+            - ./:/app_all
+            - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+        env_file: ".env"
+        environment:
+            <<: *otel-common
+#            OTEL_EXPORTER_JAEGER_AGENT_HOST: "jaeger"
+#            OTEL_EXPORTER_JAEGER_AGENT_PORT: 6831
+            OTEL_SERVICE_NAME: service-one_php_rabbitmq2
+            OTEL_RESOURCE_ATTRIBUTES: 'service.version=0.1'
+        working_dir: /app/opentelemetry
+        links:
+            - rabbitmq
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        networks:
+            - backend
+
+    mongo:
+        image: mongo
+        hostname: mongo
+        ports:
+            - "27017:27017"
+        restart: always
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: root
+        networks:
+            - backend
+
+    mongo-express:
+        image: mongo-express
+        hostname: mongo-express
+        restart: always
+        ports:
+            - "8081:8081"
+        expose:
+            - "8081"
+        environment:
+            ME_CONFIG_MONGODB_URL: mongodb://root:root@mongo:27017/
+            ME_CONFIG_BASICAUTH_ENABLED: true
+            ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
+            ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
+        networks:
+            - backend
+
+#    apache:
+#        hostname: opentelemetry
+#        extra_hosts:
+#            - "host.docker.internal:host-gateway"
+#            - "opentelemetry:host-gateway"
+#        image: php:8.4-apache
+#        ports:
+#            - "8080:8080"
+#        volumes:
+#            - ./app:/app
+#            - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+#        networks:
+#            - backend
+
+    jaeger:
+        image: ${REGISTRY:-}jaegertracing/jaeger:${JAEGER_VERSION:-latest}
+        ports:
+            - "16686:16686" # Web UI
+#          - "4317:4317" # Collector - OTLP gRPC
+#            - "4318:4318" # Collector - OTLP HTTP
+            - "6831:6831/udp" # Agent - Thrift protocol used by most current Jaeger clients
+            - "14250:14250"
+        environment:
+            - LOG_LEVEL=debug
+        networks:
+            - backend
+
+    hotrod:
+        image: ${REGISTRY:-}jaegertracing/example-hotrod:${HOTROD_VERSION:-latest}
+        # To run the latest trunk build, find the tag at Docker Hub and use the line below
+        # https://hub.docker.com/r/jaegertracing/example-hotrod-snapshot/tags
+        #image: jaegertracing/example-hotrod-snapshot:0ab8f2fcb12ff0d10830c1ee3bb52b745522db6c
+        ports:
+            - "8082:8082"
+            - "8083:8083"
+        command: ["all"]
+        environment:
+            - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+        networks:
+            - backend
+        depends_on:
+            - jaeger
+
+    collector:
+        hostname: collector
+        image: otel/opentelemetry-collector-contrib
+        volumes:
+            - ./opentelemetry/collector:/etc/otel
+        ports:
+            - '4317:4317'
+            - '4318:4318'
+        expose:
+            - "4317"
+            - "4318"
+        environment:
+            <<: *otel-common
+        networks:
+            - backend
+
+    zipkin:
+        hostname: zipkin
+        image: openzipkin/zipkin-slim
+        ports:
+            - '9411:9411'
+
+networks:
+    backend:
+        driver: "bridge"
